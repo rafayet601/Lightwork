@@ -3,6 +3,27 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/app/api/auth/[...nextauth]/route'
 import prisma from '@/lib/prisma'
 
+// Rate limiting - a simple in-memory implementation
+// Note: For production, use a Redis-based solution or a service like Upstash
+const REQUESTS_PER_MINUTE = 60;
+const ipRequests = new Map<string, { count: number, resetTime: number }>();
+
+function checkRateLimit(ip: string) {
+  const now = Date.now();
+  const requestData = ipRequests.get(ip) || { count: 0, resetTime: now + 60000 };
+  
+  // Reset counter if needed
+  if (now > requestData.resetTime) {
+    requestData.count = 0;
+    requestData.resetTime = now + 60000;
+  }
+  
+  requestData.count++;
+  ipRequests.set(ip, requestData);
+  
+  return requestData.count <= REQUESTS_PER_MINUTE;
+}
+
 // Sample workout templates
 const workoutTemplates = {
   "full-body": {
@@ -39,6 +60,15 @@ const workoutTemplates = {
 
 // GET - List all available templates or get a specific template
 export async function GET(request: Request) {
+  // Rate limiting
+  const ip = request.headers.get('x-forwarded-for') || 'unknown';
+  if (process.env.NODE_ENV === 'production' && !checkRateLimit(ip)) {
+    return NextResponse.json(
+      { error: 'Too many requests, please try again later' },
+      { status: 429 }
+    );
+  }
+  
   const session = await getServerSession(authOptions)
   
   if (!session || !session.user) {
@@ -49,15 +79,18 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const templateId = searchParams.get('id')
     
+    // Validate templateId if provided
     if (templateId) {
-      // Return a specific template
-      const template = workoutTemplates[templateId as keyof typeof workoutTemplates]
-      
-      if (!template) {
-        return NextResponse.json({ error: 'Template not found' }, { status: 404 })
+      if (typeof templateId !== 'string' || !Object.keys(workoutTemplates).includes(templateId)) {
+        // Return a specific template
+        const template = workoutTemplates[templateId as keyof typeof workoutTemplates]
+        
+        if (!template) {
+          return NextResponse.json({ error: 'Template not found' }, { status: 404 })
+        }
+        
+        return NextResponse.json(template)
       }
-      
-      return NextResponse.json(template)
     } else {
       // Return list of all available templates
       const templates = Object.entries(workoutTemplates).map(([id, template]) => ({
@@ -72,7 +105,9 @@ export async function GET(request: Request) {
   } catch (error: any) {
     console.error('Error with templates:', error)
     return NextResponse.json(
-      { error: error.message || 'Internal server error' }, 
+      { error: process.env.NODE_ENV === 'production' 
+          ? 'An error occurred while fetching templates'  // Generic message for production
+          : error.message || 'Internal server error' }, 
       { status: 500 }
     )
   }
@@ -80,6 +115,15 @@ export async function GET(request: Request) {
 
 // POST - Create a workout from a template
 export async function POST(request: Request) {
+  // Rate limiting
+  const ip = request.headers.get('x-forwarded-for') || 'unknown';
+  if (process.env.NODE_ENV === 'production' && !checkRateLimit(ip)) {
+    return NextResponse.json(
+      { error: 'Too many requests, please try again later' },
+      { status: 429 }
+    );
+  }
+  
   const session = await getServerSession(authOptions)
   
   if (!session || !session.user || !session.user.id) {
@@ -90,8 +134,13 @@ export async function POST(request: Request) {
     const data = await request.json()
     const { templateId } = data
     
-    if (!templateId) {
+    // Validate templateId
+    if (!templateId || typeof templateId !== 'string') {
       return NextResponse.json({ error: 'Template ID is required' }, { status: 400 })
+    }
+    
+    if (!Object.keys(workoutTemplates).includes(templateId)) {
+      return NextResponse.json({ error: 'Invalid template ID' }, { status: 400 })
     }
     
     const template = workoutTemplates[templateId as keyof typeof workoutTemplates]
@@ -100,8 +149,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Template not found' }, { status: 404 })
     }
     
-    // Log the session user ID for debugging
-    console.log('Creating workout from template with user ID:', session.user.id)
+    // Log the session user ID for debugging - only in development
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Creating workout from template with user ID:', session.user.id)
+    }
     
     // First verify the user exists
     const user = await prisma.user.findUnique({
@@ -109,10 +160,12 @@ export async function POST(request: Request) {
     });
     
     if (!user) {
-      console.error('User not found in database:', session.user.id);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('User not found in database:', session.user.id);
+      }
       
-      // Try to create the user if it's the demo user
-      if (session.user.id === 'demo-1') {
+      // Try to create the user if it's the demo user and we're in development
+      if (session.user.id === 'demo-1' && process.env.NODE_ENV === 'development') {
         try {
           const newUser = await prisma.user.create({
             data: {
@@ -122,7 +175,9 @@ export async function POST(request: Request) {
               image: session.user.image || 'https://ui-avatars.com/api/?name=Demo+User&background=0D8ABC&color=fff'
             }
           });
-          console.log('Created missing demo user on the fly:', newUser);
+          if (process.env.NODE_ENV === 'development') {
+            console.log('Created missing demo user on the fly:', newUser);
+          }
         } catch (createError) {
           console.error('Failed to create missing demo user:', createError);
           return NextResponse.json(
@@ -149,9 +204,9 @@ export async function POST(request: Request) {
             name: exercise.name,
             sets: {
               create: exercise.sets.map((set: any) => ({
-                weight: set.weight,
-                reps: set.reps,
-                rpe: set.rpe || null,
+                weight: Math.max(0, Number(set.weight)),
+                reps: Math.max(1, Number(set.reps)),
+                rpe: set.rpe !== undefined ? Math.min(10, Math.max(0, Number(set.rpe))) : null,
               })),
             },
           })),
@@ -166,16 +221,21 @@ export async function POST(request: Request) {
       },
     })
     
-    console.log('Workout created successfully from template:', workout.id);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Workout created successfully from template:', workout.id);
+    }
+    
     return NextResponse.json(workout)
   } catch (error: any) {
     console.error('Error creating workout from template:', error)
-    // Add more detailed error information
-    if (error.meta) {
+    // Add more detailed error information - but only in development
+    if (process.env.NODE_ENV === 'development' && error.meta) {
       console.error('Error metadata:', error.meta)
     }
     return NextResponse.json(
-      { error: error.message || 'Internal server error' }, 
+      { error: process.env.NODE_ENV === 'production' 
+        ? 'An error occurred while creating workout from template'  // Generic message for production
+        : error.message || 'Internal server error' }, 
       { status: 500 }
     )
   }
