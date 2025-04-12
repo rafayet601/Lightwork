@@ -1,72 +1,74 @@
-type ExerciseHistory = {
+/**
+ * Utilities for progressive overload calculations and tracking
+ */
+
+// Types
+interface ExerciseSet {
+  weight: number;
+  reps: number;
+  rpe?: number | null;
+}
+
+interface ExerciseHistory {
   date: Date;
-  sets: {
-    weight: number;
-    reps: number;
-  }[];
-}[];
+  sets: ExerciseSet[];
+}
 
 /**
- * Calculate the one-rep max (1RM) using the Brzycki formula
+ * Calculate One-Rep Max using Brzycki formula
  * 1RM = weight × (36 / (37 - reps))
  */
 export function calculateOneRepMax(weight: number, reps: number): number {
+  if (reps <= 0) return 0;
   if (reps === 1) return weight;
+  
   return weight * (36 / (37 - reps));
 }
 
 /**
- * Calculate the volume (total weight lifted) for a set
+ * Calculate total volume (weight × reps) for all sets
  */
-export function calculateVolume(weight: number, reps: number): number {
-  return weight * reps;
+export function calculateTotalVolume(sets: ExerciseSet[]): number {
+  return sets.reduce((total, set) => total + (set.weight * set.reps), 0);
 }
 
 /**
- * Calculate the total volume for a workout
+ * Calculate average RPE for a workout
  */
-export function calculateTotalVolume(sets: { weight: number; reps: number }[]): number {
-  return sets.reduce((total, set) => total + calculateVolume(set.weight, set.reps), 0);
-}
-
-/**
- * Get the highest weight used for a specific exercise
- */
-export function getHighestWeight(history: ExerciseHistory): number {
-  let highest = 0;
+export function calculateAverageRPE(sets: ExerciseSet[]): number | null {
+  const setsWithRPE = sets.filter(set => set.rpe != null);
   
-  for (const workout of history) {
-    for (const set of workout.sets) {
-      if (set.weight > highest) {
-        highest = set.weight;
-      }
-    }
+  if (setsWithRPE.length === 0) {
+    return null;
   }
   
-  return highest;
+  const totalRPE = setsWithRPE.reduce((sum, set) => sum + (set.rpe || 0), 0);
+  return totalRPE / setsWithRPE.length;
 }
 
 /**
- * Get the suggested weight increase for progressive overload
- * This uses a simple algorithm that suggests increasing by:
- * - 2.5kg/5lbs for exercises under 20kg/45lbs
- * - 5kg/10lbs for exercises between 20-50kg/45-110lbs
- * - 2.5kg/5lbs for exercises over 50kg/110lbs
+ * Suggest weight increase based on RPE and current weight
  */
-export function getSuggestedWeightIncrease(currentWeight: number): number {
-  if (currentWeight < 20) {
-    return 2.5;
-  } else if (currentWeight < 50) {
-    return 5;
+export function suggestWeightIncrease(weight: number, rpe: number | null): number {
+  if (rpe === null) {
+    // Default modest increase if no RPE data
+    return weight * 1.025; // 2.5% increase
+  }
+  
+  // Weight increase based on RPE
+  if (rpe <= 6) {
+    return weight * 1.05; // 5% increase if RPE was too easy
+  } else if (rpe <= 8) {
+    return weight * 1.025; // 2.5% increase if RPE was moderate
   } else {
-    return 2.5;
+    return weight; // No increase if RPE was high
   }
 }
 
 /**
  * Get progress data for an exercise
  */
-export function getExerciseProgress(history: ExerciseHistory) {
+export function getExerciseProgress(history: ExerciseHistory[]) {
   // Sort history by date
   const sortedHistory = [...history].sort((a, b) => a.date.getTime() - b.date.getTime());
   
@@ -87,4 +89,60 @@ export function getExerciseProgress(history: ExerciseHistory) {
   });
   
   return progress;
+}
+
+/**
+ * Identify if a workout set contains personal records
+ */
+export function identifyPersonalRecords(
+  currentExercise: { name: string, sets: ExerciseSet[] },
+  exerciseHistory: { name: string, date: Date, sets: ExerciseSet[] }[]
+): {
+  weightPR: boolean,
+  repsPR: boolean,
+  volumePR: boolean,
+  oneRepMaxPR: boolean
+} {
+  // Filter history to only include matching exercise name
+  const history = exerciseHistory.filter(h => h.name === currentExercise.name);
+  
+  if (history.length === 0) {
+    // First time doing this exercise, all sets are PRs
+    return {
+      weightPR: true,
+      repsPR: true,
+      volumePR: true,
+      oneRepMaxPR: true
+    };
+  }
+  
+  // Get all sets from history
+  const allHistoricalSets = history.flatMap(h => h.sets);
+  
+  // Get current best values
+  const currentSets = currentExercise.sets;
+  
+  // Find previous best values
+  const prevMaxWeight = Math.max(...allHistoricalSets.map(set => set.weight));
+  const prevMaxReps = Math.max(...allHistoricalSets.map(set => set.reps));
+  const prevMaxVolume = Math.max(...allHistoricalSets.map(set => set.weight * set.reps));
+  const prevMaxOneRepMax = Math.max(
+    ...allHistoricalSets.map(set => calculateOneRepMax(set.weight, set.reps))
+  );
+  
+  // Calculate current best values
+  const currentMaxWeight = Math.max(...currentSets.map(set => set.weight));
+  const currentMaxReps = Math.max(...currentSets.map(set => set.reps));
+  const currentMaxVolume = Math.max(...currentSets.map(set => set.weight * set.reps));
+  const currentMaxOneRepMax = Math.max(
+    ...currentSets.map(set => calculateOneRepMax(set.weight, set.reps))
+  );
+  
+  // Compare to determine PRs
+  return {
+    weightPR: currentMaxWeight > prevMaxWeight,
+    repsPR: currentMaxReps > prevMaxReps,
+    volumePR: currentMaxVolume > prevMaxVolume,
+    oneRepMaxPR: currentMaxOneRepMax > prevMaxOneRepMax
+  };
 } 

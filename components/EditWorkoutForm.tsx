@@ -1,16 +1,17 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
-import { Trash2, Plus } from 'lucide-react'
+import { Trash2, Plus, Save } from 'lucide-react'
 
 type ExerciseSet = {
+  id?: string
   weight: number
   reps: number
-  rpe?: number
+  rpe?: number | null
 }
 
 type Exercise = {
@@ -19,15 +20,24 @@ type Exercise = {
   sets: ExerciseSet[]
 }
 
-export default function WorkoutForm() {
+type Workout = {
+  id: string
+  name: string
+  date: string
+  exercises: Exercise[]
+}
+
+interface EditWorkoutFormProps {
+  workout: Workout
+}
+
+export default function EditWorkoutForm({ workout }: EditWorkoutFormProps) {
   const router = useRouter()
-  const [workoutName, setWorkoutName] = useState('')
+  const [workoutName, setWorkoutName] = useState(workout.name)
   const [workoutDate, setWorkoutDate] = useState(
-    new Date().toISOString().split('T')[0]
+    new Date(workout.date).toISOString().split('T')[0]
   )
-  const [exercises, setExercises] = useState<Exercise[]>([
-    { id: '1', name: '', sets: [{ weight: 0, reps: 0 }] }
-  ])
+  const [exercises, setExercises] = useState<Exercise[]>(workout.exercises)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -89,28 +99,24 @@ export default function WorkoutForm() {
   }
 
   // Update set details
-  const updateSet = (exerciseId: string, setIndex: number, field: 'weight' | 'reps' | 'rpe', value: number) => {
-    setExercises(prevExercises => {
-      return prevExercises.map(exercise => {
-        if (exercise.id === exerciseId) {
-          const updatedSets = [...exercise.sets];
-          // Ensure value is a valid number
-          const numericValue = isNaN(value) ? 0 : value;
-          updatedSets[setIndex] = {
-            ...updatedSets[setIndex],
-            [field]: numericValue
-          };
-          return {
-            ...exercise,
-            sets: updatedSets
-          };
+  const updateSet = (exerciseId: string, setIndex: number, field: keyof ExerciseSet, value: number) => {
+    setExercises(
+      exercises.map(exercise => {
+        if (exercise.id !== exerciseId) {
+          return exercise
         }
-        return exercise;
-      });
-    });
-  };
+        
+        const newSets = [...exercise.sets]
+        newSets[setIndex] = { 
+          ...newSets[setIndex], 
+          [field]: value 
+        }
+        return { ...exercise, sets: newSets }
+      })
+    )
+  }
 
-  // Submit the workout
+  // Submit the updated workout
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -137,8 +143,8 @@ export default function WorkoutForm() {
       setIsSubmitting(true)
       setError('')
       
-      const response = await fetch('/api/workouts', {
-        method: 'POST',
+      const response = await fetch(`/api/workouts/${workout.id}`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
@@ -151,15 +157,11 @@ export default function WorkoutForm() {
       
       if (!response.ok) {
         const errorData = await response.json() as { error: string }
-        throw new Error(errorData.error || 'Error creating workout')
+        throw new Error(errorData.error || 'Error updating workout')
       }
       
-      // Reset form
-      setWorkoutName('')
-      setWorkoutDate(new Date().toISOString().split('T')[0])
-      setExercises([{ id: '1', name: '', sets: [{ weight: 0, reps: 0 }] }])
-      
-      // Refresh page to show new workout
+      // Navigate back to the workout details page
+      router.push(`/workouts/${workout.id}`)
       router.refresh()
       
     } catch (err) {
@@ -255,8 +257,8 @@ export default function WorkoutForm() {
                     type="button"
                     onClick={() => addSet(exercise.id)}
                     size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
+                    variant="ghost"
+                    className="text-xs"
                   >
                     Add Set
                   </Button>
@@ -265,57 +267,56 @@ export default function WorkoutForm() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b">
-                        <th className="px-2 py-1 text-left font-medium">Set</th>
-                        <th className="px-2 py-1 text-left font-medium">Weight (kg)</th>
-                        <th className="px-2 py-1 text-left font-medium">Reps</th>
-                        <th className="px-2 py-1 text-left font-medium">RPE (optional)</th>
-                        <th className="px-2 py-1 w-10"></th>
+                      <tr className="border-b text-xs">
+                        <th className="text-left font-medium py-2 w-16">Set</th>
+                        <th className="text-left font-medium py-2 px-2">Weight (kg)</th>
+                        <th className="text-left font-medium py-2 px-2">Reps</th>
+                        <th className="text-left font-medium py-2 px-2">RPE (optional)</th>
+                        <th className="text-right py-2 w-16"></th>
                       </tr>
                     </thead>
                     <tbody>
                       {exercise.sets.map((set, setIndex) => (
                         <tr key={setIndex} className="border-b border-opacity-50">
-                          <td className="px-2 py-2">{setIndex + 1}</td>
-                          <td className="px-2 py-2">
+                          <td className="py-2">{setIndex + 1}</td>
+                          <td className="py-2 px-2">
                             <Input
                               type="number"
                               min="0"
                               step="0.5"
-                              value={set.weight.toString()}
+                              value={set.weight}
                               onChange={(e) => updateSet(exercise.id, setIndex, 'weight', parseFloat(e.target.value) || 0)}
-                              className="w-20 h-8"
+                              className="w-full h-8"
                             />
                           </td>
-                          <td className="px-2 py-2">
+                          <td className="py-2 px-2">
                             <Input
                               type="number"
                               min="0"
-                              value={set.reps.toString()}
+                              value={set.reps}
                               onChange={(e) => updateSet(exercise.id, setIndex, 'reps', parseInt(e.target.value) || 0)}
-                              className="w-16 h-8"
+                              className="w-full h-8"
                             />
                           </td>
-                          <td className="px-2 py-2">
+                          <td className="py-2 px-2">
                             <Input
                               type="number"
                               min="0"
                               max="10"
-                              step="0.5"
-                              value={set.rpe !== undefined ? set.rpe.toString() : ''}
-                              onChange={(e) => updateSet(exercise.id, setIndex, 'rpe', parseFloat(e.target.value) || 0)}
-                              className="w-16 h-8"
+                              value={set.rpe || ''}
+                              onChange={(e) => updateSet(exercise.id, setIndex, 'rpe', parseInt(e.target.value) || 0)}
+                              className="w-full h-8"
                               placeholder="1-10"
                             />
                           </td>
-                          <td className="px-2 py-2">
+                          <td className="py-2 text-right">
                             <Button
                               type="button"
                               onClick={() => removeSet(exercise.id, setIndex)}
                               disabled={exercise.sets.length <= 1}
                               size="sm"
                               variant="ghost"
-                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                              className="h-8 w-8 p-0"
                             >
                               <Trash2 className="h-3 w-3" />
                             </Button>
@@ -331,13 +332,14 @@ export default function WorkoutForm() {
         ))}
       </div>
       
-      <div className="pt-4">
-        <Button 
-          type="submit" 
+      <div className="flex justify-end">
+        <Button
+          type="submit"
           disabled={isSubmitting}
-          className="w-full md:w-auto"
+          className="flex items-center gap-2"
         >
-          {isSubmitting ? 'Saving...' : 'Save Workout'}
+          <Save className="h-4 w-4" />
+          {isSubmitting ? 'Saving...' : 'Save Changes'}
         </Button>
       </div>
     </form>
