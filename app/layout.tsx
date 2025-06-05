@@ -6,7 +6,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from './api/auth/[...nextauth]/route'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Dumbbell } from 'lucide-react'
+import { Dumbbell, LayoutDashboard, BarChart2, Award, BookOpen, FileText, UserCircle } from 'lucide-react'
 import { Providers } from './providers'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -35,23 +35,50 @@ export default async function RootLayout({
                 </div>
                 <span className="font-bold">Liftit</span>
               </Link>
-              <nav className="flex items-center gap-4 text-sm">
+              <nav className="hidden md:flex items-center gap-4 text-sm">
                 {session ? (
                   <>
                     <Link 
                       href="/dashboard"
-                      className="transition-all duration-300 hover:text-primary text-foreground/60 hover:translate-y-[-1px]"
+                      className="transition-all duration-300 hover:text-primary text-foreground/60 hover:translate-y-[-1px] flex items-center gap-1.5"
                     >
+                      <LayoutDashboard className="h-4 w-4" />
                       Dashboard
                     </Link>
                     <Link
                       href="/progress"
-                      className="transition-all duration-300 hover:text-primary text-foreground/60 hover:translate-y-[-1px]"
+                      className="transition-all duration-300 hover:text-primary text-foreground/60 hover:translate-y-[-1px] flex items-center gap-1.5"
                     >
+                      <BarChart2 className="h-4 w-4" />
                       Progress
                     </Link>
+                    <Link
+                      href="/exercises"
+                      className="transition-all duration-300 hover:text-primary text-foreground/60 hover:translate-y-[-1px] flex items-center gap-1.5"
+                    >
+                      <BookOpen className="h-4 w-4" />
+                      Exercises
+                    </Link>
+                    <Link
+                      href="/templates"
+                      className="transition-all duration-300 hover:text-primary text-foreground/60 hover:translate-y-[-1px] flex items-center gap-1.5"
+                    >
+                      <FileText className="h-4 w-4" />
+                      Templates
+                    </Link>
+                    <Link
+                      href="/achievements"
+                      className="transition-all duration-300 hover:text-primary text-foreground/60 hover:translate-y-[-1px] flex items-center gap-1.5"
+                    >
+                      <Award className="h-4 w-4" />
+                      Achievements
+                    </Link>
+                    <div className="w-px h-6 bg-border/60 mx-1"></div>
                     <Button variant="outline" size="sm" asChild className="border-glow">
-                      <Link href="/api/auth/signout">Sign Out</Link>
+                      <Link href="/profile" className="flex items-center gap-1.5">
+                        <UserCircle className="h-4 w-4" />
+                        Profile
+                      </Link>
                     </Button>
                   </>
                 ) : (
@@ -60,6 +87,19 @@ export default async function RootLayout({
                   </Button>
                 )}
               </nav>
+              
+              {/* Mobile menu - simplified for small screens */}
+              <div className="md:hidden flex items-center">
+                {session ? (
+                  <Button variant="outline" size="sm" asChild className="border-glow">
+                    <Link href="/dashboard">Dashboard</Link>
+                  </Button>
+                ) : (
+                  <Button variant="default" size="sm" asChild className="shadow-lg shadow-primary/20">
+                    <Link href="/api/auth/signin">Sign In</Link>
+                  </Button>
+                )}
+              </div>
             </div>
           </header>
           <main className="flex-1 container py-8 page-enter">

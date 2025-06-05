@@ -5,9 +5,11 @@ import { useSession } from 'next-auth/react'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import WorkoutForm from '@/components/WorkoutForm'
+import MCPWorkoutAgent from '@/components/MCPWorkoutAgent'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { TrendingUp, PlusCircle, Eye, ChevronRight, Calendar, BarChart } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { TrendingUp, PlusCircle, Eye, ChevronRight, Calendar, BarChart, Bot } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 interface Set {
@@ -48,66 +50,71 @@ const itemVariants = {
 
 export default function DashboardClient({ workouts }: { workouts: Workout[] }) {
   const { data: session } = useSession()
-  const [isFormVisible, setIsFormVisible] = useState(false)
+  const [showWorkoutForm, setShowWorkoutForm] = useState(false)
   
   if (!session) {
-    return null // Let the server component handle the redirect
+    redirect('/auth/signin')
   }
 
   return (
-    <div className="container mx-auto py-8 px-4 md:px-6">
-      <motion.div 
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8"
-      >
-        <h1 className="text-3xl md:text-4xl font-bold tracking-tight gradient-text mb-4 sm:mb-0">
-          Workout Dashboard
-        </h1>
-        <div className="flex flex-wrap gap-3">
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Button asChild variant="outline" className="border-glow shadow-sm">
-              <Link href="/progress" className="flex items-center">
-                <BarChart className="h-4 w-4 mr-2" />
-                Progress Analytics
-              </Link>
-            </Button>
-          </motion.div>
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Button 
-              variant="default" 
-              className="flex items-center shadow-lg shadow-primary/20"
-              onClick={() => setIsFormVisible(!isFormVisible)}
-            >
-              <PlusCircle className="h-4 w-4 mr-2" />
-              {isFormVisible ? 'Hide Form' : 'Log Workout'}
-            </Button>
-          </motion.div>
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Welcome back, {session.user?.name}! Track your fitness journey.
+          </p>
         </div>
-      </motion.div>
-      
-      {/* Add New Workout Form Card */}
+        
+        <div className="flex gap-3">
+          <Button asChild variant="outline">
+            <Link href="/progress">
+              <BarChart className="h-4 w-4 mr-2" />
+              View Progress
+            </Link>
+          </Button>
+          <Button onClick={() => setShowWorkoutForm(!showWorkoutForm)}>
+            <PlusCircle className="h-4 w-4 mr-2" />
+            {showWorkoutForm ? 'Hide Form' : 'Log Workout'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Workout Input Section */}
       <AnimatePresence>
-        {isFormVisible && (
+        {showWorkoutForm && (
           <motion.div
-            initial={{ opacity: 0, height: 0, overflow: 'hidden' }}
-            animate={{ opacity: 1, height: 'auto', overflow: 'visible' }}
-            exit={{ opacity: 0, height: 0, overflow: 'hidden' }}
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <Card className="mb-12 border-glow bg-card/80 backdrop-blur-sm shadow-xl">
+            <Card className="bg-card/80 backdrop-blur-sm border-glow">
               <CardHeader>
-                <CardTitle className="text-xl flex items-center gap-2">
-                  <PlusCircle className="h-5 w-5 text-primary" />
-                  Log a New Workout
-                </CardTitle>
-                <CardDescription className="text-muted-foreground pt-1">
-                  Track your latest training session and monitor your progress.
+                <CardTitle>Log Your Workout</CardTitle>
+                <CardDescription>
+                  Choose between AI-powered natural language input or manual form entry
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <WorkoutForm />
+                <Tabs defaultValue="ai" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="ai" className="flex items-center gap-2">
+                      <Bot className="h-4 w-4" />
+                      AI Assistant
+                    </TabsTrigger>
+                    <TabsTrigger value="manual">Manual Form</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="ai" className="mt-6">
+                    <MCPWorkoutAgent userId={session.user.id!} />
+                  </TabsContent>
+                  
+                  <TabsContent value="manual" className="mt-6">
+                    <WorkoutForm />
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
           </motion.div>
@@ -139,7 +146,7 @@ export default function DashboardClient({ workouts }: { workouts: Workout[] }) {
             <p className="text-muted-foreground mb-6 max-w-md mx-auto">
               Start logging your training sessions to track your progress and visualize your fitness journey.
             </p>
-            <Button onClick={() => setIsFormVisible(true)} className="shadow-lg shadow-primary/20">
+            <Button onClick={() => setShowWorkoutForm(true)} className="shadow-lg shadow-primary/20">
               <PlusCircle className="h-4 w-4 mr-2" />
               Log Your First Workout
             </Button>

@@ -1,117 +1,45 @@
-# Liftit - Fitness Tracking Application
+# Liftit 🏋️‍♂️
 
-<div align="center">
-  <img src="https://via.placeholder.com/150?text=Liftit" alt="Liftit Logo" width="150" height="150">
-  <h3>Your Personal Fitness Tracking Solution</h3>
-</div>
-
-Liftit is a comprehensive fitness tracking application that allows users to log workouts, track progress, and monitor strength gains over time. Built with modern web technologies, it provides a smooth and intuitive experience for fitness enthusiasts of all levels.
+Liftit is a Next.js fitness tracking application designed to help users log workouts, track progress, and achieve fitness goals. It features a comprehensive set of tools including workout logging, exercise library, progress tracking, and an AI-powered MCP tool agent for daily exercise input.
 
 ## ✨ Features
 
-- **Authentication**: Support for credentials, GitHub, Google, and Apple sign-in
-- **Workout Logging**: Create and track workouts with exercises, sets, reps, weight, and RPE
-- **Exercise Library**: Browse a collection of exercises with detailed muscle targeting information
-- **Add to Workout**: Easily add exercises from the library to create new workouts with configurable sets, reps, and weight
-- **Progress Tracking**: Visual representation of strength gains over time
-- **Personal Records**: Automatic detection of personal records (PRs)
-- **Workout Templates**: Pre-made workout routines for quick start
-- **Responsive UI**: Mobile-friendly design for on-the-go logging
+- **Authentication**: Secure user authentication using NextAuth.
+- **Workout Logging**: Log and manage your workouts with ease.
+- **Exercise Library**: Access a library of exercises to build your workout plans.
+- **Progress Tracking**: Monitor your fitness progress over time.
+- **AI-Powered MCP Tool Agent**: Input workouts in natural language and get structured training programs.
 
-## 🚀 Getting Started
+## 🚀 Setup
 
-### Prerequisites
-
-- Node.js 18+ and npm
-- PostgreSQL database (or use the included Prisma ORM with SQLite)
-
-### Installation
-
-1. Clone the repository
+1. **Clone the Repository**:
    ```bash
-   git clone https://github.com/yourusername/liftit.git
-   cd liftit
+   git clone <repository-url>
+   cd Liftit
    ```
 
-2. Install dependencies
+2. **Install Dependencies**:
    ```bash
    npm install
    ```
 
-3. Set up environment variables
-   Copy the `.env.example` file to `.env.local` and fill in the necessary information:
-   ```bash
-   cp .env.example .env.local
-   ```
+3. **Environment Variables**:
+   - Create a `.env` file in the root directory.
+   - Add necessary environment variables (e.g., database connection strings, API keys).
 
-4. Initialize the database
-   ```bash
-   npx prisma generate
-   npx prisma db push
-   ```
-
-5. Start the development server
+4. **Run the Development Server**:
    ```bash
    npm run dev
    ```
 
-### Development Authentication
+5. **Open the Application**:
+   - Navigate to `http://localhost:3000` in your browser.
 
-For development purposes, you can use these credentials to sign in:
-- Username: `demo-user`
-- Password: `password`
+## 📱 Usage
 
-## 🛠️ Recent Updates
-
-### Exercise Library Enhancements
-
-The Exercise Library now includes full functionality for adding exercises to workouts:
-
-- **Add to Workout Button**: Each exercise card now has a functional "Add to Workout" button
-- **Configurable Sets**: Set the number of sets for the exercise (default: 3)
-- **Configurable Reps**: Set the number of reps per set (default: 10)
-- **Weight Configuration**: Add starting weight for the exercise
-- **New Workout Creation**: Create a new workout with the configured exercise directly from the library
-
-This enhancement streamlines the workout creation process, making it faster and more intuitive for users to build their routines.
-
-## 🔐 OAuth Configuration (Optional)
-
-### GitHub OAuth
-1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
-2. Create a new OAuth application
-3. Set the Authorization callback URL to `http://localhost:3000/api/auth/callback/github`
-4. Copy the Client ID and Client Secret to your `.env.local` file
-
-### Google OAuth
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project and set up OAuth credentials
-3. Add `http://localhost:3000/api/auth/callback/google` as an authorized redirect URI
-4. Copy the credentials to your `.env.local` file
-
-### Apple OAuth
-1. Follow the [Apple Developer documentation](https://developer.apple.com/sign-in-with-apple/get-started/) to set up Sign in with Apple
-2. Copy the credentials to your `.env.local` file
-
-## 🚀 Production Deployment
-
-1. Set up a production PostgreSQL database
-2. Configure environment variables for production
-3. Build the application
-   ```bash
-   npm run build
-   ```
-4. Start the application
-   ```bash
-   npm start
-   ```
-
-## 📁 Project Structure
-
-- `/app`: Main application pages and API routes (Next.js App Router)
-- `/components`: Reusable UI components
-- `/lib`: Utility functions and shared code
-- `/prisma`: Database schema and migrations
+- **Dashboard**: Access your workout logs and progress.
+- **Workout Logging**: Use the MCP tool agent to input workouts in natural language.
+- **Progress Tracking**: View your progress over time and set new goals.
 
 ## 🤝 Contributing
 
