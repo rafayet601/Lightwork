@@ -46,6 +46,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   workouts      Workout[]
+  goals         Goal[]
 }
 
 model VerificationToken {
@@ -86,4 +87,20 @@ model Set {
   exercise    Exercise  @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+model Goal {
+  id                String   @id @default(cuid())
+  type              String   // strength, muscle_gain, endurance, fat_loss, performance
+  exercise          String?  // Optional specific exercise
+  current           Float
+  target            Float
+  timeframe         Int      // in weeks
+  priority          String   // low, medium, high
+  status            String   // active, paused, completed, failed
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  deadline          DateTime
 } 

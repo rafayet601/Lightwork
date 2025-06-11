@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useRouter } from 'next/navigation'
 import { createMCPAgent } from '@/lib/mcp-agent'
 import MesocyclePlanner from './MesocyclePlanner'
-import { Bot, Send, Sparkles, CheckCircle, AlertCircle, Target, Calendar } from 'lucide-react'
+import { Bot, Send, Sparkles, CheckCircle, AlertCircle, Target, Calendar, Mic, Timer, Volume2 } from 'lucide-react'
 
 interface MCPWorkoutAgentProps {
   userId: string
@@ -20,6 +20,9 @@ export default function MCPWorkoutAgent({ userId }: MCPWorkoutAgentProps) {
   const router = useRouter()
   const [input, setInput] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+  const [isLiveMode, setIsLiveMode] = useState(false)
+  const [restTimeRemaining, setRestTimeRemaining] = useState(0)
   const [result, setResult] = useState<{
     success: boolean
     workout?: any
@@ -27,6 +30,51 @@ export default function MCPWorkoutAgent({ userId }: MCPWorkoutAgentProps) {
     error?: string
     workoutId?: string
   } | null>(null)
+
+  // Voice Recording Setup
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
+  const [audioChunks, setAudioChunks] = useState<Blob[]>([])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+          const recorder = new MediaRecorder(stream)
+          setMediaRecorder(recorder)
+
+          recorder.ondataavailable = (e) => {
+            if (e.data.size > 0) {
+              setAudioChunks(chunks => [...chunks, e.data])
+            }
+          }
+        })
+        .catch(err => console.error('Error accessing microphone:', err))
+    }
+  }, [])
+
+  const startRecording = () => {
+    if (mediaRecorder && mediaRecorder.state === 'inactive') {
+      setAudioChunks([])
+      mediaRecorder.start()
+      setIsRecording(true)
+    }
+  }
+
+  const stopRecording = async () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop()
+      setIsRecording(false)
+
+      // Process the recorded audio
+      const audioBlob = new Blob(audioChunks, { type: 'audio/wav' })
+      const agent = createMCPAgent(userId)
+      const result = await agent.processVoiceInput(audioBlob)
+
+      if (result.success && result.text) {
+        setInput(result.text)
+      }
+    }
+  }
 
   const handleSubmit = async () => {
     if (!input.trim()) return
@@ -70,6 +118,14 @@ export default function MCPWorkoutAgent({ userId }: MCPWorkoutAgentProps) {
     }
   }
 
+  const toggleLiveMode = () => {
+    setIsLiveMode(!isLiveMode)
+    if (!isLiveMode && result?.workout) {
+      const agent = createMCPAgent(userId)
+      agent.startLiveWorkout(result.workout)
+    }
+  }
+
   const handleExampleClick = (example: string) => {
     setInput(example)
   }
@@ -109,9 +165,31 @@ export default function MCPWorkoutAgent({ userId }: MCPWorkoutAgentProps) {
           <TabsContent value="workout" className="mt-6 space-y-4">
             {/* Input Section */}
             <div className="space-y-2">
-              <label htmlFor="workout-input" className="text-sm font-medium">
-                Describe your workout:
-              </label>
+              <div className="flex items-center justify-between">
+                <label htmlFor="workout-input" className="text-sm font-medium">
+                  Describe your workout:
+                </label>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={isRecording ? stopRecording : startRecording}
+                    className={isRecording ? 'bg-red-100' : ''}
+                  >
+                    <Mic className="h-4 w-4 mr-2" />
+                    {isRecording ? 'Stop Recording' : 'Voice Input'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={toggleLiveMode}
+                    className={isLiveMode ? 'bg-green-100' : ''}
+                  >
+                    <Timer className="h-4 w-4 mr-2" />
+                    {isLiveMode ? 'Exit Live Mode' : 'Live Mode'}
+                  </Button>
+                </div>
+              </div>
               <Textarea
                 id="workout-input"
                 value={input}
@@ -122,125 +200,170 @@ export default function MCPWorkoutAgent({ userId }: MCPWorkoutAgentProps) {
               />
             </div>
 
-        {/* Submit Button */}
-        <Button 
-          onClick={handleSubmit}
-          disabled={!input.trim() || isProcessing}
-          className="w-full"
-        >
-          {isProcessing ? (
-            <>
-              <Bot className="h-4 w-4 mr-2 animate-spin" />
-              Processing...
-            </>
-          ) : (
-            <>
-              <Send className="h-4 w-4 mr-2" />
-              Log Workout
-            </>
-          )}
-        </Button>
+            {/* Live Mode Timer */}
+            {isLiveMode && restTimeRemaining > 0 && (
+              <div className="flex items-center justify-center p-4 bg-muted rounded-lg">
+                <Timer className="h-6 w-6 mr-2" />
+                <span className="text-2xl font-bold">
+                  {Math.floor(restTimeRemaining / 60)}:{(restTimeRemaining % 60).toString().padStart(2, '0')}
+                </span>
+              </div>
+            )}
 
-        {/* Examples */}
-        <div className="space-y-2">
-          <p className="text-sm font-medium">Try these examples:</p>
-          <div className="space-y-2">
-            {examples.map((example, index) => (
-              <Card 
-                key={index}
-                className="p-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                onClick={() => handleExampleClick(example)}
-              >
-                <pre className="text-xs whitespace-pre-wrap font-mono">
-                  {example}
-                </pre>
-              </Card>
-            ))}
-          </div>
-        </div>
+            {/* Submit Button */}
+            <Button 
+              onClick={handleSubmit}
+              disabled={!input.trim() || isProcessing}
+              className="w-full"
+            >
+              {isProcessing ? (
+                <>
+                  <Bot className="h-4 w-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  Log Workout
+                </>
+              )}
+            </Button>
 
-        {/* Result Display */}
-        {result && (
-          <div className="space-y-4">
-            {result.success && result.workout ? (
-              <Alert className="border-green-200 bg-green-50">
-                <CheckCircle className="h-4 w-4 text-green-600" />
-                <AlertDescription className="text-green-800">
-                  <div className="space-y-2">
-                    <p className="font-medium">
-                      Workout "{result.workout.name}" logged successfully!
-                    </p>
-                    {result.workoutId && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => router.push(`/workouts/${result.workoutId}`)}
-                      >
-                        View Workout Details
-                      </Button>
-                    )}
-                  </div>
-                </AlertDescription>
-              </Alert>
-            ) : (
-              <Alert className="border-red-200 bg-red-50">
-                <AlertCircle className="h-4 w-4 text-red-600" />
-                <AlertDescription className="text-red-800">
-                  <div className="space-y-2">
-                    <p className="font-medium">Could not parse your workout</p>
-                    {result.error && (
-                      <p className="text-sm">{result.error}</p>
-                    )}
-                    {result.suggestions && (
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium">Try these formats:</p>
-                        <ul className="text-xs space-y-1">
-                          {result.suggestions.map((suggestion, index) => (
-                            <li key={index} className="flex items-start gap-1">
-                              <span>•</span>
-                              <span>{suggestion}</span>
-                            </li>
-                          ))}
-                        </ul>
+            {/* Examples */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Try these examples:</p>
+              <div className="space-y-2">
+                {examples.map((example, index) => (
+                  <Card 
+                    key={index}
+                    className="p-3 cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => handleExampleClick(example)}
+                  >
+                    <pre className="text-xs whitespace-pre-wrap font-mono">
+                      {example}
+                    </pre>
+                  </Card>
+                ))}
+              </div>
+            </div>
+
+            {/* Result Display */}
+            {result && (
+              <div className="space-y-4">
+                {result.success && result.workout ? (
+                  <Alert className="border-green-200 bg-green-50">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <AlertDescription className="text-green-800">
+                      <div className="space-y-2">
+                        <p className="font-medium">
+                          Workout "{result.workout.name}" logged successfully!
+                        </p>
+                        {result.workoutId && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => router.push(`/workouts/${result.workoutId}`)}
+                          >
+                            View Workout Details
+                          </Button>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </AlertDescription>
-              </Alert>
-            )}
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <Alert className="border-red-200 bg-red-50">
+                    <AlertCircle className="h-4 w-4 text-red-600" />
+                    <AlertDescription className="text-red-800">
+                      <div className="space-y-2">
+                        <p className="font-medium">Could not parse your workout</p>
+                        {result.error && (
+                          <p className="text-sm">{result.error}</p>
+                        )}
+                        {result.suggestions && (
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium">Try these formats:</p>
+                            <ul className="text-xs space-y-1">
+                              {result.suggestions.map((suggestion, index) => (
+                                <li key={index} className="flex items-start gap-1">
+                                  <span>•</span>
+                                  <span>{suggestion}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+                )}
 
-            {/* Parsed Workout Preview */}
-            {result.workout && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Parsed Workout Preview</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">{result.workout.name}</Badge>
-                    <Badge variant="outline">{result.workout.date}</Badge>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    {result.workout.exercises.map((exercise: any, index: number) => (
-                      <Card key={index} className="p-3">
-                        <h4 className="font-medium">{exercise.name}</h4>
-                        <div className="mt-2 space-y-1">
-                          {exercise.sets.map((set: any, setIndex: number) => (
-                            <div key={setIndex} className="text-sm text-muted-foreground">
-                              Set {setIndex + 1}: {set.weight}kg × {set.reps} reps
-                              {set.rpe && ` @ RPE ${set.rpe}`}
+                {/* Parsed Workout Preview */}
+                {result.workout && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Parsed Workout Preview</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">{result.workout.name}</Badge>
+                        <Badge variant="outline">{result.workout.date}</Badge>
+                        {result.workout.duration && (
+                          <Badge variant="outline">{result.workout.duration} min</Badge>
+                        )}
+                      </div>
+                      
+                      <div className="space-y-2">
+                        {result.workout.exercises.map((exercise: any, index: number) => (
+                          <Card key={index} className="p-3">
+                            <h4 className="font-medium">{exercise.name}</h4>
+                            
+                            {/* Safety Warnings */}
+                            {exercise.safetyWarnings && exercise.safetyWarnings.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                {exercise.safetyWarnings.map((warning: string, wIndex: number) => (
+                                  <Alert key={wIndex} className="py-1 px-2 text-xs">
+                                    <AlertCircle className="h-3 w-3 mr-1" />
+                                    {warning}
+                                  </Alert>
+                                ))}
+                              </div>
+                            )}
+                            
+                            <div className="mt-2 space-y-1">
+                              {exercise.sets.map((set: any, setIndex: number) => (
+                                <div key={setIndex} className="text-sm text-muted-foreground">
+                                  Set {setIndex + 1}: {set.weight}kg × {set.reps} reps
+                                  {set.rpe && ` @ RPE ${set.rpe}`}
+                                  {set.notes && ` - ${set.notes}`}
+                                </div>
+                              ))}
                             </div>
-                          ))}
+                          </Card>
+                        ))}
+                      </div>
+
+                      {/* Workout Summary */}
+                      <div className="mt-4 pt-4 border-t">
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="text-center">
+                            <p className="text-sm font-medium">Total Volume</p>
+                            <p className="text-lg font-bold">{result.workout.totalVolume}kg</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-sm font-medium">Intensity</p>
+                            <p className="text-lg font-bold">{result.workout.intensity}%</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-sm font-medium">Duration</p>
+                            <p className="text-lg font-bold">{result.workout.duration}min</p>
+                          </div>
                         </div>
-                      </Card>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
             )}
-          </div>
-        )}
           </TabsContent>
           
           <TabsContent value="plan" className="mt-6">

@@ -1,22 +1,48 @@
 import { z } from 'zod'
 import { createMesocyclePlanner, TrainingGoalSchema, type TrainingGoal, type Mesocycle } from './mesocycle-planner'
 
-// MCP Tool Schema Definitions
+// Enhanced schemas for coaching
 const ExerciseSetSchema = z.object({
-  weight: z.number().min(0).describe("Weight in kg or lbs"),
-  reps: z.number().min(1).describe("Number of repetitions"),
-  rpe: z.number().min(1).max(10).optional().describe("Rate of Perceived Exertion (1-10)")
+  weight: z.number().positive(),
+  reps: z.number().positive(),
+  rpe: z.number().min(1).max(10).optional(),
+  restTime: z.number().positive().optional(),
+  notes: z.string().optional(),
+  formNotes: z.string().optional(),
+  coachFeedback: z.string().optional(),
 })
 
 const ExerciseSchema = z.object({
-  name: z.string().min(1).describe("Exercise name (e.g., 'Bench Press', 'Squats')"),
-  sets: z.array(ExerciseSetSchema).min(1).describe("Array of exercise sets")
+  name: z.string(),
+  sets: z.array(ExerciseSetSchema),
+  targetMuscleGroups: z.array(z.string()).optional(),
+  safetyWarnings: z.array(z.string()).optional(),
+  coachingTips: z.array(z.string()).optional(),
+  progressionSuggestion: z.string().optional(),
 })
 
 const WorkoutSchema = z.object({
-  name: z.string().min(1).describe("Workout name"),
-  date: z.string().describe("Workout date in YYYY-MM-DD format"),
-  exercises: z.array(ExerciseSchema).min(1).describe("Array of exercises")
+  name: z.string(),
+  date: z.string(),
+  exercises: z.array(ExerciseSchema),
+  duration: z.number().optional(),
+  totalVolume: z.number().optional(),
+  intensity: z.number().optional(),
+  coachNotes: z.string().optional(),
+  motivationalMessage: z.string().optional(),
+})
+
+const GoalSchema = z.object({
+  id: z.string(),
+  type: z.enum(['strength', 'muscle_gain', 'endurance', 'fat_loss', 'performance']),
+  exercise: z.string().optional(),
+  current: z.number(),
+  target: z.number(),
+  timeframe: z.number(), // weeks
+  priority: z.enum(['low', 'medium', 'high']),
+  status: z.enum(['active', 'paused', 'completed', 'failed']),
+  createdAt: z.string(),
+  deadline: z.string(),
 })
 
 // Exercise database for name matching and suggestions
@@ -44,11 +70,98 @@ const EXERCISE_DATABASE = [
   'Burpees', 'Jumping Jacks', 'High Knees'
 ]
 
+// Coaching database
+const COACHING_TIPS = {
+  'Bench Press': [
+    'Keep your shoulder blades retracted and down',
+    'Maintain a slight arch in your lower back',
+    'Control the descent, explosive ascent',
+    'Keep your core tight throughout the movement'
+  ],
+  'Squats': [
+    'Keep your chest up and core engaged',
+    'Track your knees over your toes',
+    'Go to parallel or below for full range of motion',
+    'Drive through your heels on the way up'
+  ],
+  'Deadlifts': [
+    'Keep the bar close to your body throughout',
+    'Engage your lats to protect your spine',
+    'Hip hinge movement, not a squat',
+    'Neutral spine throughout the movement'
+  ],
+  'Pull-ups': [
+    'Full range of motion from dead hang to chin over bar',
+    'Engage your core to prevent swinging',
+    'Control the descent for maximum benefit',
+    'Focus on pulling with your back, not just arms'
+  ]
+}
+
+const SAFETY_RULES = {
+  'Bench Press': [
+    'Always use a spotter for heavy sets',
+    'Don\'t bounce the bar off your chest',
+    'Keep your feet planted on the ground',
+    'Use safety bars or pins when training alone'
+  ],
+  'Squats': [
+    'Always use safety bars set just below your lowest squat position',
+    'Don\'t lean forward excessively',
+    'Don\'t let your knees cave inward',
+    'Start with bodyweight if you\'re a beginner'
+  ],
+  'Deadlifts': [
+    'Never round your back under load',
+    'Don\'t jerk the bar off the ground',
+    'Use proper footwear with flat soles',
+    'Start with light weight to master form'
+  ]
+}
+
+const PROGRESSIVE_OVERLOAD_RULES = {
+  strength: {
+    weightIncrease: 2.5, // kg per week
+    repRange: [1, 5],
+    restTime: [180, 300], // seconds
+    frequency: 3 // times per week
+  },
+  hypertrophy: {
+    weightIncrease: 1.25, // kg per week
+    repRange: [6, 12],
+    restTime: [60, 120],
+    frequency: 4
+  },
+  endurance: {
+    weightIncrease: 0.5,
+    repRange: [12, 20],
+    restTime: [30, 60],
+    frequency: 5
+  }
+}
+
+const MOTIVATIONAL_MESSAGES = [
+  "Great job! You're getting stronger every day! 💪",
+  "Consistency is key - you're building unstoppable momentum! 🔥",
+  "Your dedication is paying off! Keep pushing your limits! 🚀",
+  "Every rep counts towards your goal! You've got this! ⭐",
+  "Progress isn't always linear, but you're definitely moving forward! 📈",
+  "Your future self will thank you for the work you're putting in today! 🌟",
+  "Champions are made in the gym, one workout at a time! 🏆",
+  "You're not just building muscle, you're building character! 💎"
+]
+
 export class MCPWorkoutAgent {
   private userId: string
+  private workoutHistory: any[] = []
+  private userGoals: any[] = []
+  private currentWorkout: any = null
+  private restTimer: NodeJS.Timeout | null = null
+  private restTimeRemaining: number = 0
 
   constructor(userId: string) {
     this.userId = userId
+    this.loadWorkoutHistory()
   }
 
   /**
@@ -228,9 +341,113 @@ export class MCPWorkoutAgent {
     }
   }
 
-  /**
-   * Parse natural language input into structured workout data
-   */
+  // Voice Input Processing
+  async processVoiceInput(audioBlob: Blob): Promise<{
+    success: boolean
+    text?: string
+    error?: string
+  }> {
+    try {
+      // Simulate voice-to-text processing
+      // In a real implementation, you'd integrate with a speech-to-text service
+      return {
+        success: true,
+        text: "Bench press 3 sets of 8 at 80kg", // Simulated result
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Voice processing failed'
+      }
+    }
+  }
+
+  // Live Workout Mode
+  startLiveWorkout(workout: z.infer<typeof WorkoutSchema>) {
+    this.currentWorkout = workout
+    this.startRestTimer(90) // Default 90 second rest
+  }
+
+  private startRestTimer(seconds: number) {
+    this.restTimeRemaining = seconds
+    this.restTimer = setInterval(() => {
+      this.restTimeRemaining--
+      if (this.restTimeRemaining <= 0) {
+        this.stopRestTimer()
+      }
+    }, 1000)
+  }
+
+  stopRestTimer() {
+    if (this.restTimer) {
+      clearInterval(this.restTimer)
+      this.restTimer = null
+    }
+  }
+
+  // Progressive Overload Suggestions
+  suggestNextSet(exercise: string, lastSet: z.infer<typeof ExerciseSetSchema>): {
+    weight: number
+    reps: number
+    rpe?: number
+  } {
+    const history = this.getExerciseHistory(exercise)
+    const lastWorkout = history[history.length - 1]
+    
+    if (!lastWorkout) {
+      return {
+        weight: lastSet.weight,
+        reps: lastSet.reps,
+        rpe: lastSet.rpe
+      }
+    }
+
+    // Calculate suggested progression
+    const progression = PROGRESSIVE_OVERLOAD_RULES.strength
+    const suggestedWeight = Math.round(lastSet.weight * (1 + progression.weightIncrease))
+    const suggestedReps = lastSet.reps + progression.repRange[1]
+
+    return {
+      weight: suggestedWeight,
+      reps: suggestedReps,
+      rpe: lastSet.rpe
+    }
+  }
+
+  // Safety Checks
+  checkExerciseSafety(exercise: string, weight: number, reps: number): {
+    warnings: string[]
+    suggestions: string[]
+  } {
+    const warnings: string[] = []
+    const suggestions: string[] = []
+
+    // Check against safety rules
+    const rules = SAFETY_RULES[exercise as keyof typeof SAFETY_RULES] || []
+    warnings.push(...rules)
+
+    // Check for potential form issues based on weight/reps
+    if (weight > 0 && reps > 0) {
+      const history = this.getExerciseHistory(exercise)
+      const lastWorkout = history[history.length - 1]
+
+      if (lastWorkout) {
+        // Check for sudden weight increases
+        if (weight > lastWorkout.weight * 1.2) {
+          warnings.push(`Sudden weight increase detected. Consider gradual progression.`)
+        }
+
+        // Check for high volume
+        if (reps * weight > lastWorkout.reps * lastWorkout.weight * 1.3) {
+          warnings.push(`High volume increase detected. Monitor fatigue.`)
+        }
+      }
+    }
+
+    return { warnings, suggestions }
+  }
+
+  // Enhanced Workout Parsing
   async parseWorkoutInput(input: string): Promise<{
     success: boolean
     workout?: z.infer<typeof WorkoutSchema>
@@ -238,26 +455,64 @@ export class MCPWorkoutAgent {
     error?: string
   }> {
     try {
-      // Use AI to parse the natural language input
-      const parsed = await this.parseWithAI(input)
+      const workout = this.parseWorkoutText(input)
+      const validatedWorkout = WorkoutSchema.parse(workout)
       
-      // Validate and clean the parsed data
-      const validatedWorkout = WorkoutSchema.parse(parsed)
-      
+      // Add coaching enhancements
+      validatedWorkout.exercises = await this.enhanceExercisesWithCoaching(validatedWorkout.exercises)
+      validatedWorkout.motivationalMessage = this.getMotivationalMessage()
+
       return {
         success: true,
         workout: validatedWorkout
       }
     } catch (error) {
-      // If parsing fails, provide suggestions
-      const suggestions = this.generateSuggestions(input)
-      
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to parse workout',
-        suggestions
+        error: 'Could not parse your workout. Try describing it more clearly.',
+        suggestions: [
+          'Bench Press 3x8 @80kg',
+          'Squats: 100kg x 5, 110kg x 3, 120kg x 1',
+          'Push-ups 3 sets of 15 reps'
+        ]
       }
     }
+  }
+
+  private calculateTotalVolume(workout: z.infer<typeof WorkoutSchema>): number {
+    return workout.exercises.reduce((total, exercise) => {
+      return total + exercise.sets.reduce((exerciseTotal, set) => {
+        return exerciseTotal + (set.weight * set.reps)
+      }, 0)
+    }, 0)
+  }
+
+  private calculateAverageIntensity(workout: z.infer<typeof WorkoutSchema>): number {
+    // Implementation would use estimated 1RM calculations
+    return 0.75 // Placeholder: 75% of 1RM
+  }
+
+  private estimateWorkoutDuration(workout: z.infer<typeof WorkoutSchema>): number {
+    const totalSets = workout.exercises.reduce((total, exercise) => total + exercise.sets.length, 0)
+    const averageRestTime = 90 // seconds
+    return Math.ceil((totalSets * averageRestTime) / 60) // Convert to minutes
+  }
+
+  private async loadWorkoutHistory() {
+    try {
+      const response = await fetch(`/api/workouts?userId=${this.userId}`)
+      const data = await response.json()
+      this.workoutHistory = data
+    } catch (error) {
+      console.error('Failed to load workout history:', error)
+    }
+  }
+
+  private getExerciseHistory(exercise: string) {
+    return this.workoutHistory
+      .flatMap(workout => workout.exercises)
+      .filter(ex => ex.name === exercise)
+      .flatMap(ex => ex.sets)
   }
 
   /**
@@ -464,6 +719,169 @@ export class MCPWorkoutAgent {
         error: error instanceof Error ? error.message : 'Unknown error'
       }
     }
+  }
+
+  private async enhanceExercisesWithCoaching(exercises: any[]): Promise<any[]> {
+    return exercises.map(exercise => ({
+      ...exercise,
+      coachingTips: COACHING_TIPS[exercise.name as keyof typeof COACHING_TIPS] || [],
+      safetyWarnings: SAFETY_RULES[exercise.name as keyof typeof SAFETY_RULES] || [],
+      sets: exercise.sets.map((set: any) => ({
+        ...set,
+        coachFeedback: this.generateSetCoaching(exercise.name, set)
+      }))
+    }))
+  }
+
+  private parseWorkoutText(input: string): any {
+    const lines = input.split('\n').filter(line => line.trim())
+    let workoutName = 'Workout'
+    let exercises: any[] = []
+
+    lines.forEach(line => {
+      if (line.toLowerCase().includes('workout:') || (!line.includes('x') && !line.includes('sets'))) {
+        workoutName = line.replace(/workout:\s*/i, '').trim()
+      } else {
+        const exercise = this.parseExerciseLine(line)
+        if (exercise) exercises.push(exercise)
+      }
+    })
+
+    const totalVolume = this.calculateTotalVolume({ exercises })
+    const intensity = this.calculateAverageIntensity({ exercises })
+    const duration = this.estimateWorkoutDuration({ exercises })
+
+    return {
+      name: workoutName,
+      date: new Date().toISOString().split('T')[0],
+      exercises,
+      totalVolume,
+      intensity,
+      duration
+    }
+  }
+
+  private generateSetCoaching(exerciseName: string, set: any): string {
+    const rpe = set.rpe || 8
+    const tips = [
+      `Focus on perfect form - quality over quantity!`,
+      `You've got ${set.reps} strong reps at ${set.weight}kg!`,
+      `Breathe deeply and stay focused!`,
+      `Control the weight, don't let it control you!`,
+      `Each rep brings you closer to your goal!`
+    ]
+
+    if (rpe >= 9) {
+      tips.push(`That was intense! Great job pushing your limits!`)
+    } else if (rpe <= 6) {
+      tips.push(`You've got more in the tank! Consider adding weight next time.`)
+    }
+
+    return tips[Math.floor(Math.random() * tips.length)]
+  }
+
+  private getMotivationalMessage(): string {
+    return MOTIVATIONAL_MESSAGES[Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)]
+  }
+
+  async generateWorkout(params: {
+    goalType: string
+    exercise?: string
+    currentProgress?: number
+    timeframe?: number
+    recentWorkouts?: any[]
+  }) {
+    const { goalType, exercise, currentProgress, timeframe, recentWorkouts } = params
+
+    // Generate workout name based on goal type
+    const workoutName = `Progressive ${goalType.charAt(0).toUpperCase() + goalType.slice(1)} Training`
+
+    // Generate exercises based on goal type and recent workout history
+    const exercises = this.generateSmartExercises(goalType, exercise, recentWorkouts)
+
+    // Generate coaching notes
+    const coachNotes = this.generateCoachingNotes(goalType, exercise, currentProgress, timeframe)
+
+    // Generate motivational message
+    const motivationalMessage = this.generateMotivationalMessage()
+
+    return {
+      name: workoutName,
+      exercises,
+      coachNotes,
+      motivationalMessage
+    }
+  }
+
+  private generateSmartExercises(goalType: string, specificExercise?: string, recentWorkouts?: any[]) {
+    const exerciseTemplates = {
+      strength: [
+        { name: specificExercise || 'Squats', sets: '5x3', weight: '85-95%', rpe: '8-9', focus: 'Maximum strength' },
+        { name: 'Bench Press', sets: '4x5', weight: '80-85%', rpe: '7-8', focus: 'Strength endurance' },
+        { name: 'Deadlifts', sets: '3x5', weight: '85-90%', rpe: '8-9', focus: 'Power development' }
+      ],
+      muscle_gain: [
+        { name: 'Bench Press', sets: '4x8-10', weight: '70-75%', rpe: '7-8', focus: 'Hypertrophy' },
+        { name: 'Squats', sets: '4x10-12', weight: '65-70%', rpe: '7-8', focus: 'Volume' },
+        { name: 'Rows', sets: '3x12-15', weight: '60-70%', rpe: '6-7', focus: 'Muscle building' }
+      ],
+      endurance: [
+        { name: 'Squats', sets: '3x15-20', weight: '50-60%', rpe: '6-7', focus: 'Muscular endurance' },
+        { name: 'Push-ups', sets: '4x12-20', weight: 'Bodyweight', rpe: '6-8', focus: 'Endurance' },
+        { name: 'Plank', sets: '3x60s', weight: 'Bodyweight', rpe: '7-8', focus: 'Core strength' }
+      ],
+      fat_loss: [
+        { name: 'Squats', sets: '3x12-15', weight: '60-70%', rpe: '7-8', focus: 'Metabolic conditioning' },
+        { name: 'Burpees', sets: '3x20', weight: 'Bodyweight', rpe: '8-9', focus: 'HIIT' },
+        { name: 'Mountain Climbers', sets: '3x30s', weight: 'Bodyweight', rpe: '8-9', focus: 'Cardio' }
+      ],
+      performance: [
+        { name: 'Squats', sets: '5x5', weight: '75-80%', rpe: '7-8', focus: 'Power' },
+        { name: 'Box Jumps', sets: '4x8', weight: 'Bodyweight', rpe: '7-8', focus: 'Explosiveness' },
+        { name: 'Sprint Intervals', sets: '6x30s', weight: 'Bodyweight', rpe: '8-9', focus: 'Speed' }
+      ]
+    }
+
+    // If we have recent workouts, adjust the template based on user's history
+    if (recentWorkouts && recentWorkouts.length > 0) {
+      // Analyze recent workouts to avoid overtraining and ensure variety
+      const recentExercises = new Set(recentWorkouts.flatMap(w => 
+        w.exercises.map((e: any) => e.name)
+      ))
+
+      // Filter out exercises that were done in the last 2 workouts
+      const filteredExercises = exerciseTemplates[goalType as keyof typeof exerciseTemplates]
+        .filter(ex => !recentExercises.has(ex.name))
+
+      // If we filtered out too many exercises, add some back
+      if (filteredExercises.length < 2) {
+        return exerciseTemplates[goalType as keyof typeof exerciseTemplates]
+      }
+
+      return filteredExercises
+    }
+
+    return exerciseTemplates[goalType as keyof typeof exerciseTemplates] || exerciseTemplates.strength
+  }
+
+  private generateCoachingNotes(goalType: string, exercise?: string, currentProgress?: number, timeframe?: number) {
+    const timeRemaining = timeframe ? `${timeframe} weeks` : 'your timeframe'
+    const progress = currentProgress ? `${currentProgress}%` : 'your current progress'
+    
+    return `🎯 Goal-focused training for ${exercise || goalType}. You have ${timeRemaining} to reach your target. Based on your current progress (${progress}), focus on progressive overload and consistent execution.`
+  }
+
+  private generateMotivationalMessage() {
+    const messages = [
+      "🔥 Champions are made one rep at a time! Keep pushing your limits!",
+      "💪 Your consistency is your superpower - use it wisely!",
+      "🚀 Every workout is a step closer to your strongest self!",
+      "⭐ Progress isn't always linear, but it's always worth it!",
+      "🏆 Your future self will thank you for the work you put in today!",
+      "💎 You're not just building muscle, you're building character!",
+      "🌟 The only bad workout is the one that didn't happen!"
+    ]
+    return messages[Math.floor(Math.random() * messages.length)]
   }
 }
 

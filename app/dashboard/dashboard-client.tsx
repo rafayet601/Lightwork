@@ -6,10 +6,11 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import WorkoutForm from '@/components/WorkoutForm'
 import MCPWorkoutAgent from '@/components/MCPWorkoutAgent'
+import CoachAgent from '@/components/CoachAgent'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { TrendingUp, PlusCircle, Eye, ChevronRight, Calendar, BarChart, Bot } from 'lucide-react'
+import { TrendingUp, PlusCircle, Eye, ChevronRight, Calendar, BarChart, Bot, Brain } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 interface Set {
@@ -98,14 +99,22 @@ export default function DashboardClient({ workouts }: { workouts: Workout[] }) {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Tabs defaultValue="ai" className="w-full">
-                  <TabsList className="grid w-full grid-cols-2">
+                <Tabs defaultValue="coach" className="w-full">
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="coach" className="flex items-center gap-2">
+                      <Brain className="h-4 w-4" />
+                      Coach
+                    </TabsTrigger>
                     <TabsTrigger value="ai" className="flex items-center gap-2">
                       <Bot className="h-4 w-4" />
-                      AI Assistant
+                      Quick Log
                     </TabsTrigger>
                     <TabsTrigger value="manual">Manual Form</TabsTrigger>
                   </TabsList>
+                  
+                  <TabsContent value="coach" className="mt-6">
+                    <CoachAgent userId={session.user.id!} />
+                  </TabsContent>
                   
                   <TabsContent value="ai" className="mt-6">
                     <MCPWorkoutAgent userId={session.user.id!} />
