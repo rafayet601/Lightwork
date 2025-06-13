@@ -500,7 +500,8 @@ export class MCPWorkoutAgent {
 
   private async loadWorkoutHistory() {
     try {
-      const response = await fetch(`/api/workouts?userId=${this.userId}`)
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
+      const response = await fetch(`${baseUrl}/api/workouts?userId=${this.userId}`)
       const data = await response.json()
       this.workoutHistory = data
     } catch (error) {
