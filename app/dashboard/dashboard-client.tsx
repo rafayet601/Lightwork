@@ -49,12 +49,47 @@ const itemVariants = {
   show: { y: 0, opacity: 1, transition: { type: "spring", stiffness: 300, damping: 24 } }
 };
 
-export default function DashboardClient({ workouts }: { workouts: Workout[] }) {
+export default function DashboardClient() {
   const { data: session } = useSession()
   const [showWorkoutForm, setShowWorkoutForm] = useState(false)
+  const [workouts, setWorkouts] = useState<Workout[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  
+  React.useEffect(() => {
+    const fetchWorkouts = async () => {
+      if (!session?.user?.id) return
+      
+      try {
+        const response = await fetch(`/api/workouts?userId=${session.user.id}`)
+        if (response.ok) {
+          const data = await response.json()
+          setWorkouts(data.slice(0, 6)) // Limit to 6 workouts for dashboard
+        }
+      } catch (error) {
+        console.error('Failed to fetch workouts:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    
+    fetchWorkouts()
+  }, [session?.user?.id])
   
   if (!session) {
     redirect('/auth/signin')
+  }
+  
+  if (isLoading) {
+    return (
+      <div className="space-y-8 animate-pulse">
+        <div className="h-8 bg-muted rounded w-1/4"></div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="h-48 bg-muted rounded-lg"></div>
+          ))}
+        </div>
+      </div>
+    )
   }
 
   return (

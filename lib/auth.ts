@@ -3,15 +3,32 @@ import { PrismaAdapter } from '@auth/prisma-adapter'
 import prisma from '@/lib/prisma'
 import GithubProvider from 'next-auth/providers/github'
 import GoogleProvider from 'next-auth/providers/google'
-import AppleProvider from 'next-auth/providers/apple'
 import CredentialsProvider from 'next-auth/providers/credentials'
+import crypto from 'crypto'
+
+// Generate a secure secret if not provided
+const generateSecureSecret = () => {
+  return crypto.randomBytes(32).toString('hex')
+}
+
+// Get or generate a consistent secret for development
+const getAuthSecret = () => {
+  if (process.env.NEXTAUTH_SECRET) {
+    return process.env.NEXTAUTH_SECRET
+  }
+  
+  if (process.env.NODE_ENV === 'development') {
+    // Use a consistent secret for development to avoid JWT issues
+    return 'development-secret-key-do-not-use-in-production-' + crypto.createHash('md5').update('lightwork-dev').digest('hex')
+  }
+  
+  throw new Error('NEXTAUTH_SECRET must be set in production')
+}
 
 // Create a demo user if it doesn't exist - ONLY FOR DEVELOPMENT
 const createDemoUserIfNotExists = async () => {
-  // Only create demo users in development environment
   if (process.env.NODE_ENV !== 'development') {
-    console.warn('Attempted to create demo user in non-development environment');
-    return null;
+    return null
   }
   
   try {
@@ -22,7 +39,7 @@ const createDemoUserIfNotExists = async () => {
           { email: 'demo@example.com' }
         ]
       }
-    });
+    })
     
     if (!user) {
       const newUser = await prisma.user.create({
@@ -32,26 +49,21 @@ const createDemoUserIfNotExists = async () => {
           email: 'demo@example.com',
           image: 'https://ui-avatars.com/api/?name=Demo+User&background=0D8ABC&color=fff'
         }
-      });
-      console.log('Created demo user:', newUser);
-      return newUser;
+      })
+      console.log('Created demo user for development')
+      return newUser
     }
     
-    return user;
+    return user
   } catch (error) {
-    console.error('Error creating demo user:', error);
-    throw error;
+    console.error('Error creating demo user:', error)
+    return null
   }
-};
-
-// Run this once at startup - but only in development
-if (process.env.NODE_ENV === 'development') {
-  createDemoUserIfNotExists().catch(console.error);
 }
 
-// Get the NextAuth secret from environment variables or generate a warning
-if (!process.env.NEXTAUTH_SECRET) {
-  console.warn('No NEXTAUTH_SECRET environment variable set. This is insecure in production!');
+// Initialize demo user in development
+if (process.env.NODE_ENV === 'development') {
+  createDemoUserIfNotExists().catch(console.error)
 }
 
 // Get the NextAuth URL from environment variables
@@ -64,42 +76,38 @@ if (!nextAuthUrl && process.env.NODE_ENV === 'production') {
 }
 
 export const authOptions: NextAuthOptions = {
+  secret: getAuthSecret(),
   session: {
-    strategy: 'jwt', // Use JWT for credential provider compatibility
-    maxAge: 30 * 24 * 60 * 60, // 30 days session lifetime
+    strategy: 'jwt',
+    maxAge: 24 * 60 * 60, // 24 hours
+    updateAge: 60 * 60, // 1 hour
   },
-  secret: process.env.NEXTAUTH_SECRET,
-  debug: process.env.NODE_ENV === 'development', // Enable debug mode in development only
+  debug: process.env.NODE_ENV === 'development',
   adapter: PrismaAdapter(prisma),
   providers: [
-    // Only include GitHub provider if credentials are provided
+    // GitHub Provider (production ready)
     ...(process.env.GITHUB_ID && process.env.GITHUB_SECRET
       ? [
           GithubProvider({
             clientId: process.env.GITHUB_ID,
             clientSecret: process.env.GITHUB_SECRET,
+            allowDangerousEmailAccountLinking: process.env.NODE_ENV === 'development',
           }),
         ]
       : []),
-    // Only include Google provider if credentials are provided
+    
+    // Google Provider (production ready)
     ...(process.env.GOOGLE_ID && process.env.GOOGLE_SECRET
       ? [
           GoogleProvider({
             clientId: process.env.GOOGLE_ID,
             clientSecret: process.env.GOOGLE_SECRET,
+            allowDangerousEmailAccountLinking: process.env.NODE_ENV === 'development',
           }),
         ]
       : []),
-    // Only include Apple provider if credentials are provided
-    ...(process.env.APPLE_ID && process.env.APPLE_SECRET
-      ? [
-          AppleProvider({
-            clientId: process.env.APPLE_ID,
-            clientSecret: process.env.APPLE_SECRET,
-          }),
-        ]
-      : []),
-    // Include a fallback Credentials provider for development ONLY
+    
+    // Development-only credentials provider
     ...(process.env.NODE_ENV === 'development' ? [
       CredentialsProvider({
         id: 'credentials',
@@ -109,101 +117,113 @@ export const authOptions: NextAuthOptions = {
           password: { label: "Password", type: "password", placeholder: "password" }
         },
         async authorize(credentials) {
-          // Log the attempt for debugging
-          console.log("Attempting to authorize with credentials:", credentials?.username);
-          
-          // IMPORTANT: This is only for development & testing!
-          console.warn("Using hardcoded credentials - NOT SECURE FOR PRODUCTION");
-          
-          // Check if credentials exist
           if (!credentials?.username || !credentials?.password) {
-            console.error("Missing username or password");
-            return null;
+            return null
           }
           
-          // For development demo purposes - NEVER use hard-coded credentials in production
+          // Development credentials only
           if (credentials.username === "demo-user" && credentials.password === "password") {
-            console.log("Development credentials authorized successfully");
+            const user = await createDemoUserIfNotExists()
             
-            // Make sure demo user exists
-            const user = await createDemoUserIfNotExists();
+            if (!user) return null
             
-            if (!user) return null;
-            
-            // Return a user object that will be stored in the JWT token
             return { 
               id: user.id,
               name: user.name,
               email: user.email,
               image: user.image
-            };
+            }
           }
           
-          console.error("Development credentials failed - username:", credentials.username, "password length:", credentials.password.length);
-          return null;
+          return null
         }
       })
     ] : []),
   ],
   callbacks: {
-    // JWT callback to add user ID to the token
-    jwt: async ({ token, user }) => {
-      if (process.env.NODE_ENV === 'development') {
-        console.log("JWT callback called", { tokenUserId: token.id, userId: user?.id });
-      }
+    jwt: async ({ token, user, account }) => {
+      // Initial sign in
       if (user) {
-        token.id = user.id;
+        token.id = user.id
+        token.email = user.email
+        token.name = user.name
+        token.picture = user.image
       }
-      return token;
+      
+      // Subsequent requests
+      if (account) {
+        token.accessToken = account.access_token
+      }
+      
+      return token
     },
-    // Session callback to add user ID to the session
+    
     session: async ({ session, token }) => {
-      if (process.env.NODE_ENV === 'development') {
-        console.log("Session callback called", { hasToken: !!token, hasUser: !!session.user });
-      }
       if (token && session.user) {
-        session.user.id = token.id as string;
+        session.user.id = token.id as string
+        session.user.email = token.email as string
+        session.user.name = token.name as string
+        session.user.image = token.picture as string
       }
-      return session;
+      return session
     },
+    
     redirect: async ({ url, baseUrl }) => {
-      if (process.env.NODE_ENV === 'development') {
-        console.log("Redirect callback called", { url, baseUrl });
-      }
-      // Allow relative URLs
-      if (url.startsWith("/")) return `${baseUrl}${url}`;
-      // Allow callback URLs on the same origin
-      else if (new URL(url).origin === baseUrl) return url;
-      return baseUrl;
+      // Allows relative callback URLs
+      if (url.startsWith("/")) return `${baseUrl}${url}`
+      // Allows callback URLs on the same origin
+      else if (new URL(url).origin === baseUrl) return url
+      return baseUrl
     },
   },
   pages: {
     signIn: '/auth/signin',
     error: '/auth/error',
   },
-  // Add security headers for production
-  useSecureCookies: process.env.NODE_ENV === 'production',
   cookies: {
     sessionToken: {
-      name: `${process.env.NODE_ENV === 'production' ? '__Secure-' : ''}next-auth.session-token`,
+      name: process.env.NODE_ENV === 'production' 
+        ? '__Secure-next-auth.session-token' 
+        : 'next-auth.session-token',
       options: {
         httpOnly: true,
         sameSite: 'lax',
         path: '/',
         secure: process.env.NODE_ENV === 'production',
+        domain: process.env.NODE_ENV === 'production' 
+          ? process.env.NEXTAUTH_URL?.includes('://') 
+            ? new URL(process.env.NEXTAUTH_URL).hostname 
+            : undefined
+          : 'localhost'
       },
+    },
+  },
+  events: {
+    async signIn({ user, account, profile, isNewUser }) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('User signed in:', { userId: user.id, email: user.email })
+      }
+    },
+    async signOut({ token, session }) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('User signed out')
+      }
     },
   },
   logger: {
     error(code, metadata) {
-      console.error("NextAuth Error:", code, metadata);
+      if (process.env.NODE_ENV === 'development') {
+        console.error("NextAuth Error:", code, metadata)
+      }
     },
     warn(code) {
-      console.warn("NextAuth Warning:", code);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn("NextAuth Warning:", code)
+      }
     },
     debug(code, metadata) {
       if (process.env.NODE_ENV === 'development') {
-        console.debug("NextAuth Debug:", code, metadata);
+        console.debug("NextAuth Debug:", code, metadata)
       }
     },
   },
