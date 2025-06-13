@@ -170,7 +170,10 @@ export class MCPWorkoutAgent {
 
   constructor(userId: string) {
     this.userId = userId
-    this.loadWorkoutHistory()
+    // Only load workout history in browser environment
+    if (typeof window !== 'undefined') {
+      this.loadWorkoutHistory()
+    }
   }
 
   /**
@@ -508,9 +511,13 @@ export class MCPWorkoutAgent {
   }
 
   private async loadWorkoutHistory() {
+    // Only fetch in browser environment
+    if (typeof window === 'undefined') {
+      return
+    }
+    
     try {
-      const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
-      const response = await fetch(`${baseUrl}/api/workouts?userId=${this.userId}`)
+      const response = await fetch(`/api/workouts?userId=${this.userId}`)
       const data = await response.json()
       this.workoutHistory = data
     } catch (error) {
