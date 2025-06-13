@@ -1,5 +1,14 @@
 import { z } from 'zod'
 import { createMesocyclePlanner, TrainingGoalSchema, type TrainingGoal, type Mesocycle } from './mesocycle-planner'
+import { 
+  createAdvancedPeriodizationEngine,
+  AdvancedTrainingParamsSchema,
+  ReadinessFactorsSchema,
+  calculateOptimalVelocityLoss,
+  estimateTrainingReadiness,
+  type AdvancedTrainingParams,
+  type ReadinessFactors
+} from './advanced-periodization'
 
 // Enhanced schemas for coaching
 const ExerciseSetSchema = z.object({
@@ -883,6 +892,348 @@ export class MCPWorkoutAgent {
       "🌟 The only bad workout is the one that didn't happen!"
     ]
     return messages[Math.floor(Math.random() * messages.length)]
+  }
+
+  /**
+   * Enhanced AI-powered workout generation with latest research
+   */
+  async generateAdvancedWorkout(params: {
+    goalType: string
+    exercise?: string
+    currentProgress?: number
+    timeframe?: number
+    recentWorkouts?: any[]
+    userReadiness?: ReadinessFactors
+    enableVBT?: boolean
+    periodizationMethod?: 'linear' | 'dup_hps' | 'vbt_autoregulated'
+  }) {
+    const { 
+      goalType, 
+      exercise, 
+      currentProgress, 
+      timeframe, 
+      recentWorkouts,
+      userReadiness,
+      enableVBT = false,
+      periodizationMethod = 'dup_hps'
+    } = params
+
+    try {
+      // Estimate current and target max based on goal
+      const currentMax = this.estimateCurrentMax(exercise || 'Squat', recentWorkouts)
+      const targetMax = this.calculateTargetMax(currentMax, goalType, timeframe || 12)
+
+             // Create advanced training parameters
+       const goalAdaptation = this.mapGoalTypeToAdaptation(goalType)
+       const velocityLossAdaptation = this.mapToVelocityLossType(goalAdaptation)
+       
+       const advancedParams: AdvancedTrainingParams = {
+         exercise: exercise || 'Squat',
+         currentMax,
+         targetMax,
+         timeframe: timeframe || 12,
+         enableVBT,
+         periodizationModel: periodizationMethod,
+         autoregulationMethod: userReadiness ? 'readiness' : 'rpe',
+         targetVelocityLoss: calculateOptimalVelocityLoss(velocityLossAdaptation),
+         experienceLevel: this.assessExperienceLevel(recentWorkouts),
+         primaryAdaptation: goalAdaptation,
+         recoverability: 'average',
+         trainingAge: 2
+       }
+
+      // Create advanced periodization engine
+      const engine = createAdvancedPeriodizationEngine(advancedParams)
+
+      // Determine current week and session
+      const weekNumber = this.calculateCurrentWeek(recentWorkouts, timeframe || 12)
+      const sessionNumber = this.calculateSessionNumber(recentWorkouts)
+
+      // Generate smart workout
+      const session = engine.generateSmartWorkout({
+        weekNumber,
+        sessionNumber,
+        readiness: userReadiness,
+        recentPerformance: this.extractRecentPerformance(recentWorkouts)
+      })
+
+             // Convert to our workout format
+       const workout = this.convertSessionToWorkout(session, exercise || 'Squat')
+
+       // Add enhanced coaching notes
+       const enhancedWorkout = {
+         ...workout,
+         enhancedCoachNotes: session.coachingNotes,
+         scientificRationale: session.scientificRationale,
+         vbtGuidance: session.vbtProtocol ? this.generateVBTGuidance(session.vbtProtocol) : undefined
+       }
+
+      return {
+        success: true,
+        workout,
+        periodizationInsights: this.generatePeriodizationInsights(session, advancedParams),
+        readinessAssessment: userReadiness ? estimateTrainingReadiness(userReadiness) : undefined
+      }
+
+    } catch (error) {
+      console.error('Advanced workout generation failed:', error)
+      
+      // Fallback to basic generation
+      return this.generateWorkout(params)
+    }
+  }
+
+  /**
+   * Generate readiness assessment questionnaire
+   */
+  generateReadinessAssessment(): {
+    questions: Array<{
+      id: string
+      question: string
+      type: 'scale' | 'select'
+      options?: string[]
+      scale?: { min: number, max: number, labels: string[] }
+    }>
+    instructions: string
+  } {
+    return {
+      questions: [
+        {
+          id: 'sleepQuality',
+          question: 'How was your sleep quality last night?',
+          type: 'scale',
+          scale: { 
+            min: 1, 
+            max: 10, 
+            labels: ['Terrible', 'Poor', 'Fair', 'Good', 'Excellent'] 
+          }
+        },
+        {
+          id: 'stressLevel',
+          question: 'What is your current stress level?',
+          type: 'scale',
+          scale: { 
+            min: 1, 
+            max: 10, 
+            labels: ['Very Low', 'Low', 'Moderate', 'High', 'Very High'] 
+          }
+        },
+        {
+          id: 'energyLevel',
+          question: 'How is your energy level today?',
+          type: 'scale',
+          scale: { 
+            min: 1, 
+            max: 10, 
+            labels: ['Exhausted', 'Low', 'Fair', 'Good', 'Energized'] 
+          }
+        },
+        {
+          id: 'musclesoreness',
+          question: 'How sore are your muscles from previous training?',
+          type: 'scale',
+          scale: { 
+            min: 1, 
+            max: 10, 
+            labels: ['No soreness', 'Mild', 'Moderate', 'Significant', 'Very sore'] 
+          }
+        },
+        {
+          id: 'motivation',
+          question: 'How motivated do you feel to train today?',
+          type: 'scale',
+          scale: { 
+            min: 1, 
+            max: 10, 
+            labels: ['Not at all', 'Low', 'Moderate', 'High', 'Very motivated'] 
+          }
+        }
+      ],
+      instructions: '🧠 TRAINING READINESS ASSESSMENT\n\nAnswer these questions honestly to optimize your workout based on how you feel today. This autoregulation approach is proven to enhance training outcomes while reducing injury risk.'
+    }
+  }
+
+  /**
+   * Generate VBT guidance for users
+   */
+  private generateVBTGuidance(vbtProtocol: any): string {
+    const guidance = [
+      '⚡ VELOCITY-BASED TRAINING PROTOCOL:',
+      '',
+      '📱 Equipment needed:',
+      '• Linear position transducer (LPT) or smartphone app',
+      '• Video analysis tools (MyLift, Coach Eye, etc.)',
+      '',
+      '🎯 Target velocities:',
+      ...vbtProtocol.warmupVelocities.map((v: any) => 
+        `  ${Math.round(v.intensity * 100)}% 1RM: ${v.velocity.toFixed(2)} m/s (${v.reps} reps)`
+      ),
+      '',
+      '🛑 Stop criteria:',
+      `• ${vbtProtocol.stopCriteria === 'velocity_loss' ? 'Stop set when velocity drops below threshold' : 'Stop at target RPE'}`,
+      '',
+      '📊 Benefits of VBT:',
+      '• Objective load selection',
+      '• Real-time fatigue monitoring', 
+      '• Autoregulated training stimulus',
+      '• Superior strength gains vs traditional methods'
+    ]
+
+    return guidance.join('\n')
+  }
+
+  /**
+   * Generate periodization insights
+   */
+  private generatePeriodizationInsights(session: any, params: AdvancedTrainingParams): string {
+    const insights = [
+      `🔬 PERIODIZATION MODEL: ${params.periodizationModel.toUpperCase().replace('_', ' ')}`,
+      '',
+      '📈 Current Phase Focus:',
+      `• ${session.focus}`,
+      '',
+      '🎯 Primary Adaptation:',
+      `• ${params.primaryAdaptation.replace('_', ' ')}`,
+      '',
+      '⏰ Training Timeline:',
+      `• Total program: ${params.timeframe} weeks`,
+      `• Current focus: ${session.type} emphasis`,
+      '',
+      '🧬 Scientific Basis:',
+      session.scientificRationale || 'Evidence-based training principles applied'
+    ]
+
+    return insights.join('\n')
+  }
+
+  // Helper methods for advanced features
+  private estimateCurrentMax(exercise: string, recentWorkouts?: any[]): number {
+    if (!recentWorkouts || recentWorkouts.length === 0) {
+      // Default estimates based on exercise
+      const defaults = {
+        'Squat': 225,
+        'Bench Press': 185,
+        'Deadlift': 275,
+        'Overhead Press': 135
+      }
+      return defaults[exercise as keyof typeof defaults] || 200
+    }
+
+    // Find heaviest recent lift for this exercise
+    let maxWeight = 0
+    for (const workout of recentWorkouts) {
+      for (const exercise_data of workout.exercises || []) {
+        if (exercise_data.name === exercise) {
+          for (const set of exercise_data.sets || []) {
+            if (set.weight > maxWeight) {
+              maxWeight = set.weight
+            }
+          }
+        }
+      }
+    }
+
+    return maxWeight || 200
+  }
+
+  private calculateTargetMax(currentMax: number, goalType: string, timeframe: number): number {
+    const progressionRates = {
+      strength: 0.15, // 15% increase
+      muscle_gain: 0.12, // 12% increase
+      performance: 0.18, // 18% increase
+      endurance: 0.08, // 8% increase
+      fat_loss: 0.05 // 5% increase
+    }
+
+    const rate = progressionRates[goalType as keyof typeof progressionRates] || 0.12
+    const weeklyIncrease = rate / (timeframe / 4) // Per month
+    
+    return Math.round(currentMax * (1 + rate))
+  }
+
+  private mapGoalTypeToAdaptation(goalType: string): 'maximal_strength' | 'power_development' | 'hypertrophy' | 'strength_endurance' | 'sport_specific' {
+    const mapping = {
+      strength: 'maximal_strength' as const,
+      muscle_gain: 'hypertrophy' as const,
+      performance: 'power_development' as const,
+      endurance: 'strength_endurance' as const,
+      fat_loss: 'strength_endurance' as const
+    }
+
+    return mapping[goalType as keyof typeof mapping] || 'maximal_strength'
+  }
+
+  private assessExperienceLevel(recentWorkouts?: any[]): 'novice' | 'intermediate' | 'advanced' | 'elite' {
+    if (!recentWorkouts || recentWorkouts.length < 5) return 'novice'
+    if (recentWorkouts.length < 15) return 'intermediate'
+    if (recentWorkouts.length < 30) return 'advanced'
+    return 'elite'
+  }
+
+  private calculateCurrentWeek(recentWorkouts?: any[], totalWeeks = 12): number {
+    if (!recentWorkouts || recentWorkouts.length === 0) return 1
+    
+    // Simple calculation based on workout frequency
+    const weeksTraining = Math.min(Math.floor(recentWorkouts.length / 3), totalWeeks)
+    return Math.max(1, weeksTraining)
+  }
+
+  private calculateSessionNumber(recentWorkouts?: any[]): number {
+    if (!recentWorkouts || recentWorkouts.length === 0) return 1
+    
+    // Determine session number within current week (1-3 for HPS rotation)
+    return ((recentWorkouts.length - 1) % 3) + 1
+  }
+
+  private extractRecentPerformance(recentWorkouts?: any[]): Array<{exercise: string, rpe: number, velocityLoss?: number}> {
+    if (!recentWorkouts) return []
+
+    const performance = []
+    for (const workout of recentWorkouts.slice(-5)) { // Last 5 workouts
+      for (const exercise of workout.exercises || []) {
+        const avgRPE = exercise.sets?.reduce((sum: number, set: any) => sum + (set.rpe || 7), 0) / (exercise.sets?.length || 1)
+        performance.push({
+          exercise: exercise.name,
+          rpe: avgRPE || 7,
+          velocityLoss: undefined // Could be calculated if velocity data available
+        })
+      }
+    }
+
+    return performance
+  }
+
+  private convertSessionToWorkout(session: any, exerciseName: string) {
+    const exercise = session.exercises[0]
+    
+    return {
+      name: `${session.type.charAt(0).toUpperCase() + session.type.slice(1)} Focus - ${exerciseName}`,
+      date: new Date().toISOString().split('T')[0],
+      exercises: [{
+        name: exerciseName,
+        sets: typeof exercise.sets === 'number' ? 
+          Array.from({ length: exercise.sets }, (_, i) => ({
+            weight: Math.round(typeof exercise.intensity === 'number' ? 
+              this.estimateCurrentMax(exerciseName, []) * exercise.intensity : 185),
+            reps: Array.isArray(exercise.reps) ? exercise.reps[i] || exercise.reps[0] : exercise.reps,
+            rpe: exercise.rpeTarget || 8,
+            restTime: exercise.restPeriods[i] || exercise.restPeriods[0] || 180,
+            tempo: exercise.tempo,
+            velocityTarget: exercise.velocityTarget,
+            notes: exercise.notes
+          })) : 
+          [{ // Autoregulated placeholder
+            weight: 185,
+            reps: 'Stop at velocity loss threshold',
+            rpe: exercise.rpeTarget || 8,
+            restTime: 180,
+            notes: exercise.notes
+          }]
+      }],
+      coachNotes: session.focus,
+      estimatedDuration: session.estimatedDuration,
+      motivationalMessage: this.generateMotivationalMessage()
+    }
   }
 }
 
