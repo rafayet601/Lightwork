@@ -418,6 +418,7 @@ export class AdvancedPeriodizationEngine {
       readiness.motivation
     ]
     
+    // Return as percentage (0-100) for display purposes
     return (factors.reduce((sum, factor) => sum + factor, 0) / factors.length) * 10
   }
 
@@ -515,12 +516,15 @@ export function estimateTrainingReadiness(factors: ReadinessFactors): {
   recommendation: 'proceed' | 'reduce' | 'deload'
   adjustment: number
 } {
-  const score = (factors.sleepQuality + (11 - factors.stressLevel) + 
-                 factors.energyLevel + (11 - factors.musclesoreness) + 
-                 factors.motivation) / 5
+  const rawScore = (factors.sleepQuality + (11 - factors.stressLevel) + 
+                    factors.energyLevel + (11 - factors.musclesoreness) + 
+                    factors.motivation) / 5
 
-  if (score >= 8) return { score, recommendation: 'proceed', adjustment: 1.1 }
-  if (score >= 6) return { score, recommendation: 'proceed', adjustment: 1.0 }
-  if (score >= 4) return { score, recommendation: 'reduce', adjustment: 0.85 }
-  return { score, recommendation: 'deload', adjustment: 0.7 }
+  // Normalize score to 0-1 scale (divide by 10 since max possible average is 10)
+  const normalizedScore = rawScore / 10
+
+  if (rawScore >= 8) return { score: normalizedScore, recommendation: 'proceed', adjustment: 1.1 }
+  if (rawScore >= 6) return { score: normalizedScore, recommendation: 'proceed', adjustment: 1.0 }
+  if (rawScore >= 4) return { score: normalizedScore, recommendation: 'reduce', adjustment: 0.85 }
+  return { score: normalizedScore, recommendation: 'deload', adjustment: 0.7 }
 } 
